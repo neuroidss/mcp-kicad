@@ -1,0 +1,1737 @@
+# README.md
+```README.md
+# kicad-python Examples
+
+Some of these examples are simple scripts that can be run standalone from a terminal or IDE,
+for example:
+
+```
+python3 hello.py
+```
+
+Some of them are full plugin examples (meaning, they have a `plugin.json` file that will be
+parsed by KiCad).  To use these, you can either run them directly:
+
+```
+python3 round_tracks/round_tracks_action.py
+```
+
+Or, copy or symlink the plugin folder into your KiCad plugins directory.  This directory is
+platform-dependent:
+
+| Platform | Path
+|----------|------
+| Windows  | `C:\Users\<username>\Documents\KiCad\9.0\plugins`
+| macOS    | `/Users/<username>/Documents/KiCad/9.0/plugins`
+| Linux    | `~/.local/share/KiCad/9.0/plugins`
+
+Once you have done so, KiCad should automatically create a Python virtual environment for
+each plugin and make its action available on the PCB Editor toolbar.
+
+```
+
+# move_footprints.py
+```move_footprints.py
+from kipy import KiCad
+from kipy.geometry import Vector2, Angle
+
+board = KiCad().get_board()
+footprints = board.get_footprints()
+
+for footprint in footprints:
+    footprint.position += Vector2.from_xy_mm(5, 2)
+    footprint.orientation += Angle.from_degrees(90)
+
+board.update_items(footprints)
+
+```
+
+# create_zone.py
+```create_zone.py
+# Copyright The KiCad Developers
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the “Software”), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+from kipy import KiCad
+from kipy.board_types import (
+    BoardLayer,
+    Zone
+)
+from kipy.common_types import PolygonWithHoles
+from kipy.geometry import PolyLine, PolyLineNode
+from kipy.util import from_mm
+
+if __name__=='__main__':
+    kicad = KiCad()
+    board = kicad.get_board()
+
+    outline = PolyLine()
+    outline.append(PolyLineNode.from_xy(from_mm(100), from_mm(100)))
+    outline.append(PolyLineNode.from_xy(from_mm(110), from_mm(100)))
+    outline.append(PolyLineNode.from_xy(from_mm(110), from_mm(110)))
+    outline.append(PolyLineNode.from_xy(from_mm(100), from_mm(110)))
+    outline.append(PolyLineNode.from_xy(from_mm(100), from_mm(100)))
+    polygon = PolygonWithHoles()
+    polygon.outline = outline
+    zone = Zone()
+    zone.layers = [BoardLayer.BL_F_Cu, BoardLayer.BL_B_Cu]
+    zone.outline = polygon
+    board.create_items(zone)
+
+```
+
+# hello.py
+```hello.py
+#!/usr/bin/env python3
+
+# Copyright The KiCad Developers
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the “Software”), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from kipy import KiCad
+
+if __name__=='__main__':
+    try:
+        kicad = KiCad()
+        print(f"Connected to KiCad {kicad.get_version()}")
+    except BaseException as e:
+        print(f"Not connected to KiCad: {e}")
+
+```
+
+# version.py
+```version.py
+#!/usr/bin/env python3
+
+# Copyright The KiCad Developers
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the “Software”), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from kipy import KiCad
+from kipy.kicad import KiCadVersion
+
+if __name__=='__main__':
+    try:
+        kicad = KiCad()
+        print(f"KiCad version: {kicad.get_version().full_version}")
+    except BaseException as e:
+        print(f"Not connected to KiCad: {e}")
+        exit()
+    
+    print(f"Api version {kicad.get_api_version()}")
+    try:
+        if kicad.check_version():
+            print("KiCad version and kicad-python version match :)")
+    except BaseException as e:
+        print(f"{e}")
+
+```
+
+# round_tracks/round_tracks_utils.py
+```round_tracks/round_tracks_utils.py
+import math
+from copy import deepcopy
+from math import pi
+from typing import Sequence, Union
+from kipy.geometry import Vector2
+from kipy.board import Board
+from kipy.board_types import Track, Arc, Pad
+
+tolerance = 10  # in nanometres
+
+
+def reverseTrack(track: Union[Track, Arc]):
+    ep = deepcopy(track.start)
+    track.start = track.end
+    track.end = ep
+
+
+# determines whether 2 points are close enough to be considered identical
+def similarPoints(p1: Vector2, p2: Vector2):
+    return ((p1.x > p2.x - tolerance) and (p1.x < p2.x + tolerance)) and (
+        (p1.y > p2.y - tolerance) and (p1.y < p2.y + tolerance)
+    )
+
+
+# test if an intersection is within the bounds of a pad
+def withinPad(board: Board, pad: Pad, a: Vector2, tracks: Sequence[Track]):
+    if not board.hit_test(pad, a):
+        return False
+
+    # If the intersection is within the pad, return true
+    # But if one of the connected tracks is *entirely* within the pad, return false, since rounding won't break connectivity
+    inside = True
+    for t in tracks:
+        if board.hit_test(pad, t.end):
+            inside = False
+    return inside
+
+
+# shortens a track by an arbitrary amount, maintaining the angle and the endpoint
+def shortenTrack(t1: Track, amountToShorten):
+    # return true if amount to shorten exceeds length
+
+    if amountToShorten + tolerance >= t1.length():
+        t1.start = t1.end
+        return True
+
+    angle = normalizeAngle(getTrackAngle(t1))
+    newX = t1.start.x + math.cos(angle) * amountToShorten
+    newY = t1.start.y + math.sin(angle) * amountToShorten
+    t1.start = Vector2.from_xy(int(newX), int(newY))
+    return False
+
+
+# normalizes any angle to [-pi, pi)
+def normalizeAngle(inputAngle):
+    while inputAngle >= pi:
+        inputAngle -= 2 * pi
+    while inputAngle < -pi:
+        inputAngle += 2 * pi
+
+    return inputAngle
+
+
+# gets the angle of a track (unnormalized)
+def getTrackAngle(t1: Track):
+    # use atan2 so the correct quadrant is returned
+    return math.atan2((t1.end.y - t1.start.y), (t1.end.x - t1.start.x))
+
+
+# Get angle between tracks, assumes both start at their intersection
+def getTrackAngleDifference(t1: Track, t2: Track):
+    a1 = math.atan2(t1.end.y - t1.start.y, t1.end.x - t1.start.x)
+    a2 = math.atan2(t2.end.y - t2.start.y, t2.end.x - t2.start.x)
+    t = a1 - a2
+    if t > pi:
+        t = 2 * pi - t
+    if t < -pi:
+        t = -2 * pi - t
+    return abs(t)
+
+```
+
+# round_tracks/README.md
+```round_tracks/README.md
+# KiCad Round Tracks
+
+This `kicad-python` example is based on the KiCad Round Tracks plugin
+by mitxela, located at https://github.com/mitxela/kicad-round-tracks
+
+For more information about the algorithm, please see the original
+plugin repository.
+
+The files in this directory are licensed under the Apache license, version 2.0.
+See the LICENSE file for the full license text.
+
+Original copyright Miles McCoo, 2017  
+Extensively modified by Julian Loiacono, Oct 2018  
+Multi-layer support and repacked as action plugin by Antoine Pintout, May 2019  
+Updated subdivision algorithm by mitxela, Jan 2021  
+
+```
+
+# round_tracks/round_tracks_action.py
+```round_tracks/round_tracks_action.py
+# Original example Copyright [2017] [Miles McCoo]
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#    http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# extensively modified by Julian Loiacono, Oct 2018
+# updated and repacked as action plugin by Antoine Pintout, May 2019
+# rewritten to use kicad-python instead of SWIG by Jon Evans, March 2024
+
+# This script will round PCBNEW traces by shortening traces at intersections,
+# and filling new traces between. This process is repeated four times.
+# The resulting board is saved in a new file.
+
+import math
+import os
+import wx
+import time
+from copy import deepcopy
+from typing import Set
+
+from kipy import KiCad
+from kipy.errors import ConnectionError
+from kipy.board_types import ArcTrack, Track, PadType, BoardLayer
+from kipy.geometry import Vector2
+from kipy.util import from_mm
+
+from round_tracks_utils import (
+    getTrackAngle,
+    getTrackAngleDifference,
+    reverseTrack,
+    shortenTrack,
+    similarPoints,
+    withinPad,
+)
+from ui.round_tracks_gui import RoundTracksDialog
+
+RADIUS_DEFAULT = 2.0
+PASSES_DEFAULT = 3
+
+
+class RoundTracks(RoundTracksDialog):
+    def __init__(self):
+        super(RoundTracks, self).__init__(None)
+        self.kicad = KiCad()
+        self.board = self.kicad.get_board()
+        self.basefilename = os.path.join(
+            self.board.document.project.path,
+            os.path.splitext(self.board.document.board_filename)[0],
+        )
+
+        if self.basefilename.endswith("-rounded"):
+            self.basefilename = self.basefilename[: -len("-rounded")]
+
+        self.configfilepath = self.basefilename + ".round-tracks-config"
+        self.config = {}
+        self.netClassCount = 1
+        self.load_config()
+
+        if "checkboxes" not in self.config:
+            self.config["checkboxes"] = {
+                "new_file": False,
+                "native": True,
+                "avoid_junctions": False,
+            }
+
+        self.do_create.SetValue(self.config["checkboxes"]["new_file"])
+        self.use_native.SetValue(self.config["checkboxes"]["native"])
+        self.avoid_junctions.SetValue(self.config["checkboxes"]["avoid_junctions"])
+
+        c = self.config["classes"]
+
+        if "Default" not in c:
+            self.netclasslist.AppendItem(
+                ["Default", True, str(RADIUS_DEFAULT), str(PASSES_DEFAULT)]
+            )
+        else:
+            self.netclasslist.AppendItem(
+                [
+                    "Default",
+                    c["Default"]["do_round"],
+                    str(c["Default"]["scaling"]),
+                    str(c["Default"]["passes"]),
+                ]
+            )
+
+        for net_class in self.kicad.get_project(self.board.document).get_net_classes():
+            classname = net_class.name
+            self.netClassCount += 1
+            if classname not in c:
+                self.netclasslist.AppendItem(
+                    [classname, True, str(RADIUS_DEFAULT), str(PASSES_DEFAULT)]
+                )
+            else:
+                self.netclasslist.AppendItem(
+                    [
+                        classname,
+                        c[classname]["do_round"],
+                        str(c[classname]["scaling"]),
+                        str(c[classname]["passes"]),
+                    ]
+                )
+        self.validate_all_data()
+
+    def run(self, event):
+        start = time.time()
+        self.apply.SetLabel("Working...")
+        self.validate_all_data()
+        self.save_config()
+
+        self.prog = wx.ProgressDialog(
+            "Processing",
+            "Starting...",
+            100,
+            self,
+            wx.PD_AUTO_HIDE | wx.PD_APP_MODAL | wx.PD_ELAPSED_TIME,
+        )
+
+        if self.do_create.IsChecked():
+            new_name = self.basefilename + "-rounded.kicad_pcb"
+            self.board.save_as(new_name)
+
+        anySelected = False
+        for item in self.board.get_selection():
+            if type(item) == Track:
+                anySelected = True
+                break
+
+        commit = self.board.begin_commit()
+
+        self.allTracks = self.board.get_tracks()
+        self.allVias = self.board.get_vias()
+        self.allPads = self.board.get_pads()
+        self.selected = self.board.get_selection()
+
+        avoid = self.avoid_junctions.IsChecked()
+        classes = self.config["classes"]
+        for classname in classes:
+            if classes[classname]["do_round"]:
+                if self.use_native.IsChecked():
+                    self.addIntermediateTracks(
+                        scaling=classes[classname]["scaling"],
+                        netclass=classname,
+                        native=True,
+                        onlySelection=anySelected,
+                        avoid_junctions=avoid,
+                    )
+                else:
+                    for i in range(classes[classname]["passes"]):
+                        self.addIntermediateTracks(
+                            scaling=classes[classname]["scaling"],
+                            netclass=classname,
+                            native=False,
+                            onlySelection=anySelected,
+                            avoid_junctions=avoid,
+                            msg=f", pass {i+1}",
+                        )
+
+        self.board.push_commit(commit, "Round Tracks")
+
+        # if m_AutoRefillZones is set, we should skip here, but PCBNEW_SETTINGS is not exposed to swig
+        # ZONE_FILLER has SetProgressReporter, but PROGRESS_REPORTER is also not available, so we can't use it
+        # even zone.SetNeedRefill(False) doesn't prevent it running twice
+        self.prog.Pulse("Rebuilding zones...")
+        wx.Yield()
+
+        try:
+            self.board.refill_zones()
+        except ConnectionError:
+            pass
+
+        if bool(self.prog):
+            self.prog.Destroy()
+            wx.Yield()
+        dt = time.time() - start
+        if dt > 0.1:
+            wx.MessageBox(
+                "Done, took {:.3f} seconds".format(time.time() - start), parent=self
+            )
+        self.EndModal(wx.ID_OK)
+
+    def on_close(self, event):
+        self.EndModal(wx.ID_OK)
+
+    def on_item_editing(self, event):
+        if bool(self.netclasslist):
+            self.validate_all_data()
+
+    def load_config(self):
+        new_config = {}
+        if os.path.isfile(self.configfilepath):
+            with open(self.configfilepath, "r") as configfile:
+                for line in configfile.readlines():
+                    params = line[:-1].split("\t")
+                    new_config_line = {}
+                    try:
+                        new_config_line["do_round"] = params[1] == "True"
+                        new_config_line["scaling"] = float(params[2])
+                        new_config_line["passes"] = int(params[3])
+                        new_config[params[0]] = new_config_line
+                    except Exception:
+                        try:
+                            new_config_line["new_file"] = params[0] == "True"
+                            new_config_line["native"] = params[1] == "True"
+                            new_config_line["avoid_junctions"] = params[2] == "True"
+                            self.config["checkboxes"] = new_config_line
+                        except Exception:
+                            pass
+        self.config["classes"] = new_config
+
+    def save_config(self):
+        classes = self.config["classes"]
+        try:
+            with open(self.configfilepath, "w") as configfile:
+                for classname in classes:
+                    configfile.write(
+                        "%s\t%s\t%s\t%s\n"
+                        % (
+                            classname,
+                            str(classes[classname]["do_round"]),
+                            str(classes[classname]["scaling"]),
+                            str(classes[classname]["passes"]),
+                        )
+                    )
+                configfile.write(
+                    "%s\t%s\t%s\n"
+                    % (
+                        str(self.config["checkboxes"]["new_file"]),
+                        str(self.config["checkboxes"]["native"]),
+                        str(self.config["checkboxes"]["avoid_junctions"]),
+                    )
+                )
+        except PermissionError:
+            pass
+
+    def validate_all_data(self):
+        new_config = {}
+        for i in range(self.netClassCount):
+            for j in range(5):
+                if j == 2:
+                    # param should be between 0 and 1
+                    try:
+                        tested_val = float(self.netclasslist.GetTextValue(i, j))
+                        if tested_val < 0:
+                            self.netclasslist.SetTextValue(str(RADIUS_DEFAULT), i, j)
+                    except Exception:
+                        self.netclasslist.SetTextValue(str(RADIUS_DEFAULT), i, j)
+                if j == 3:
+                    # param should be between int 1 and 5
+                    try:
+                        tested_val = int(self.netclasslist.GetTextValue(i, j))
+                        if tested_val < 0 or tested_val > 5:
+                            self.netclasslist.SetTextValue(str(PASSES_DEFAULT), i, j)
+                    except Exception:
+                        self.netclasslist.SetTextValue(str(PASSES_DEFAULT), i, j)
+            new_config[self.netclasslist.GetTextValue(i, 0)] = {
+                "do_round": self.netclasslist.GetToggleValue(i, 1),
+                "scaling": float(self.netclasslist.GetTextValue(i, 2)),
+                "passes": int(self.netclasslist.GetTextValue(i, 3)),
+            }
+        self.config["classes"] = new_config
+        self.config["checkboxes"] = {
+            "new_file": self.do_create.IsChecked(),
+            "native": self.use_native.IsChecked(),
+            "avoid_junctions": self.avoid_junctions.IsChecked(),
+        }
+
+    def addIntermediateTracks(
+        self,
+        scaling=RADIUS_DEFAULT,
+        netclass=None,
+        native=False,
+        onlySelection=False,
+        avoid_junctions=False,
+        msg="",
+    ):
+        # A 90 degree bend will get a maximum radius of this amount
+        RADIUS = from_mm(scaling / (math.sin(math.pi / 4) + 1))
+
+        nets = sorted(self.board.get_nets(netclass_filter=netclass),
+                      key = lambda net: net.code)
+        tracksToRemove = []
+        itemsToCreate = []
+        tracksModified = []
+
+        progressInterval = int(max(1, len(nets) / 100.0 ))
+        lastReport = 0
+
+        for net in nets:
+            tracksInNet = [t for t in self.allTracks if t.net == net]
+            viasInNet = [v for v in self.allVias if v.net == net]
+
+            tracksPerLayer = {}
+            viasPerLayer = {}
+            # separate track by layer
+            for t in tracksInNet:
+                layer = t.layer
+                if layer not in tracksPerLayer:
+                    tracksPerLayer[layer] = []
+                tracksPerLayer[layer].append(t)
+
+            for v in viasInNet:
+                # a buried/blind via will report only layers affected
+                # a through via will return all 32 possible layers
+                layerSet = set(v.padstack.layers)
+                for layer in tracksPerLayer:
+                    if layer in layerSet:
+                        if layer not in viasPerLayer:
+                            viasPerLayer[layer] = []
+                        viasPerLayer[layer].append(v)
+
+            # TH pads cover all layers
+            # SMD/CONN pads only touch F.Cu and B.Cu (layers 0 and 31)
+            # Due to glitch in KiCad, pad.GetLayer() always returns 0. Need to use GetLayerSet().Contains() to actually check
+
+            padsInNet = []
+            FCuPadsInNet = []
+            BCuPadsInNet = []
+
+            for p in self.allPads:
+                if p.net == net and (not onlySelection or p in self.selected):
+                    if p.pad_type in [PadType.PT_NPTH, PadType.PT_PTH]:
+                        padsInNet.append(p)
+                    else:
+                        if BoardLayer.BL_B_Cu in set(p.padstack.layers):
+                            BCuPadsInNet.append(p)
+                        else:
+                            FCuPadsInNet.append(p)
+
+            for layer in tracksPerLayer:
+                tracks = tracksPerLayer[layer]
+
+                if layer in viasPerLayer:
+                    vias = viasPerLayer[layer]
+                    viaLocations = set([v.position for v in vias])
+                else:
+                    viaLocations = set()
+
+                # add all the possible intersections to a unique set, for iterating over later
+                intersections: Set[Vector2] = set()
+                for t1 in range(len(tracks)):
+                    for t2 in range(t1 + 1, len(tracks)):
+                        # check if these two tracks share an endpoint
+                        # reduce it to a 2-part tuple so there are not multiple objects of the same point in the set
+                        if (
+                            tracks[t1].start == tracks[t2].start
+                            or tracks[t1].end == tracks[t2].start
+                        ):
+                            intersections.add(deepcopy(tracks[t2].start))
+                        if (
+                            tracks[t1].start == tracks[t2].end
+                            or tracks[t1].end == tracks[t2].end
+                        ):
+                            intersections.add(deepcopy(tracks[t2].end))
+
+                # for each remaining intersection, shorten each track by the same amount, and place a track between.
+                trackLengths = {}
+
+                for ip in intersections:
+                    (newX, newY) = (ip.x, ip.y)
+                    tracksHere = []
+                    for t1 in tracks:
+                        if similarPoints(t1.start, ip):
+                            tracksHere.append(t1)
+                        elif similarPoints(t1.end, ip):
+                            # flip track such that all tracks start at the IP
+                            reverseTrack(t1)
+                            tracksHere.append(t1)
+                            tracksModified.append(t1)
+
+                    if len(tracksHere) == 0 or (
+                        avoid_junctions and len(tracksHere) > 2
+                    ):
+                        continue
+
+                    # if there are any arcs or vias present, skip the intersection entirely
+                    skip = False
+                    for t1 in tracksHere:
+                        if type(t1) == ArcTrack or ip in viaLocations:
+                            skip = True
+                            break
+
+                    if skip:
+                        continue
+
+                    # If the intersection is within a pad, but none of the tracks end within the pad, skip
+                    for p in padsInNet:
+                        if withinPad(self.board, p, ip, tracksHere):
+                            skip = True
+                            break
+
+                    if skip:
+                        continue
+
+                    if layer == BoardLayer.BL_F_Cu:
+                        for p in FCuPadsInNet:
+                            if withinPad(self.board, p, ip, tracksHere):
+                                skip = True
+                                break
+                    elif layer == BoardLayer.BL_B_Cu:
+                        for p in BCuPadsInNet:
+                            if withinPad(self.board, p, ip, tracksHere):
+                                skip = True
+                                break
+
+                    if skip:
+                        continue
+
+                    shortest = -1
+                    for t1 in tracksHere:
+                        if id(t1) not in trackLengths:
+                            trackLengths[id(t1)] = t1.length()
+                        if (
+                            shortest == -1
+                            or trackLengths[id(t1)] < trackLengths[id(shortest)]
+                        ):
+                            shortest = t1
+
+                    # sort these tracks by angle, so new tracks can be drawn between them
+                    tracksHere.sort(key=getTrackAngle)
+
+                    if native:
+                        halfTrackAngle = {}  # cache this, because after shortening the length may end up zero
+                        for t1 in range(len(tracksHere)):
+                            halfTrackAngle[t1] = (
+                                getTrackAngleDifference(
+                                    tracksHere[t1],
+                                    tracksHere[(t1 + 1) % len(tracksHere)],
+                                )
+                                / 2
+                            )
+
+                        for t1 in range(len(tracksHere)):
+                            f = math.sin(halfTrackAngle[t1]) + 1
+                            if shortenTrack(
+                                tracksHere[t1],
+                                min(trackLengths[id(shortest)] * 0.5, RADIUS * f),
+                            ):
+                                tracksToRemove.append(tracksHere[t1])
+                            else:
+                                tracksModified.append(tracksHere[t1])
+
+                        for t1 in range(len(tracksHere)):
+                            if not (len(tracksHere) == 2 and t1 == 1):
+                                theta = math.pi / 2 - halfTrackAngle[t1]
+                                f = 1 / (2 * math.cos(theta) + 2)
+
+                                sp = tracksHere[t1].start
+                                ep = tracksHere[(t1 + 1) % len(tracksHere)].start
+
+                                if halfTrackAngle[t1] > math.pi / 2 - 0.001:
+                                    track = Track()
+                                    track.start = sp
+                                    track.end = ep
+                                    track.width = tracksHere[t1].width
+                                    track.layer = tracksHere[t1].layer
+                                    track.net = tracksHere[t1].net
+                                    itemsToCreate.append(track)
+                                else:
+                                    mp = Vector2.from_xy(
+                                        int(newX * (1 - f * 2) + sp.x * f + ep.x * f),
+                                        int(newY * (1 - f * 2) + sp.y * f + ep.y * f),
+                                    )
+                                    arc = ArcTrack()
+                                    arc.start = sp
+                                    arc.mid = mp
+                                    arc.end = ep
+                                    arc.width = tracksHere[t1].width
+                                    arc.layer = tracksHere[t1].layer
+                                    arc.net = tracksHere[t1].net
+                                    itemsToCreate.append(arc)
+
+                    else:
+                        # shorten all these tracks
+                        for t1 in range(len(tracksHere)):
+                            theta = (
+                                math.pi / 2
+                                - getTrackAngleDifference(
+                                    tracksHere[t1],
+                                    tracksHere[(t1 + 1) % len(tracksHere)],
+                                )
+                                / 2
+                            )
+                            f = 1 / (2 * math.cos(theta) + 2)
+                            shortenTrack(
+                                tracksHere[t1],
+                                min(trackLengths[id(shortest)] * f, RADIUS),
+                            )
+                            tracksModified.append(tracksHere[t1])
+
+                        # connect the new startpoints in a circle around the old center point
+                        for t1 in range(len(tracksHere)):
+                            # dont add 2 new tracks in the 2 track case
+                            if not (len(tracksHere) == 2 and t1 == 1):
+                                track = Track()
+                                track.start = tracksHere[t1].start
+                                track.end = tracksHere[(t1 + 1) % len(tracksHere)].start
+                                track.width = tracksHere[t1].width
+                                track.layer = tracksHere[t1].layer
+                                track.net = tracksHere[t1].net
+                                itemsToCreate.append(track)
+
+            if net.code - lastReport > progressInterval:
+                self.prog.Pulse(
+                    f"Netclass: {netclass}, {net.code+1} of {len(nets)}{msg}"
+                )
+                lastReport = net.code
+
+        createdItems = self.board.create_items(itemsToCreate)
+
+        if onlySelection:
+            self.board.add_to_selection(createdItems)
+
+        self.board.update_items(tracksModified)
+        self.board.remove_items(tracksToRemove)
+
+
+if __name__ == "__main__":
+    app = wx.App()
+    rt = RoundTracks()
+    rt.ShowModal()
+    rt.Destroy()
+
+```
+
+# round_tracks/requirements.txt
+```round_tracks/requirements.txt
+kicad-python>=0.2.0
+wxPython~=4.2
+
+```
+
+# round_tracks/icon.png
+```round_tracks/icon.png
+[VIBE_CODING_BOT: BINARY FILE]
+```
+
+# round_tracks/plugin.json
+```round_tracks/plugin.json
+{
+    "$schema": "https://go.kicad.org/api/schemas/v1",
+    "identifier": "com.gitlab.kicad.kicad-python.round-tracks",
+    "name": "Round Tracks",
+    "description": "Subdivision-based track rounding",
+    "runtime": {
+        "type": "python",
+        "min_version": "3.9"
+    },
+    "actions": [
+        {
+            "identifier": "round-tracks",
+            "name": "Round Tracks",
+            "description": "Rounds all the tracks on the board",
+            "show-button": true,
+            "scopes": [
+                "pcb"
+            ],
+            "entrypoint": "round_tracks_action.py",
+            "icons-light": [
+                "icon.png"
+            ]
+        }
+    ]
+}
+
+```
+
+# round_tracks/LICENSE
+```round_tracks/LICENSE
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+```
+
+# round_tracks/ui/round_tracks_gui.py
+```round_tracks/ui/round_tracks_gui.py
+# -*- coding: utf-8 -*-
+
+###########################################################################
+## Python code generated with wxFormBuilder (version 4.2.1-0-g80c4cb6)
+## http://www.wxformbuilder.org/
+##
+## PLEASE DO *NOT* EDIT THIS FILE!
+###########################################################################
+
+import wx
+import wx.xrc
+import wx.dataview
+
+###########################################################################
+## Class RoundTracksDialog
+###########################################################################
+
+class RoundTracksDialog ( wx.Dialog ):
+
+	def __init__( self, parent ):
+		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Round Tracks IPC API Demo", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER )
+
+		self.SetSizeHints( wx.Size( 510,300 ), wx.DefaultSize )
+
+		grid_vert = wx.FlexGridSizer( 2, 1, 0, 0 )
+		grid_vert.AddGrowableCol( 0 )
+		grid_vert.AddGrowableRow( 0 )
+		grid_vert.SetFlexibleDirection( wx.BOTH )
+		grid_vert.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+
+		self.netclasslist = wx.dataview.DataViewListCtrl( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.netclasslist.SetMinSize( wx.Size( 450,100 ) )
+
+		self.net_class = self.netclasslist.AppendTextColumn( u"Net Class", wx.dataview.DATAVIEW_CELL_INERT, 160, wx.ALIGN_LEFT, wx.dataview.DATAVIEW_COL_RESIZABLE|wx.dataview.DATAVIEW_COL_SORTABLE )
+		self.do_rounding = self.netclasslist.AppendToggleColumn( u"Rounding", wx.dataview.DATAVIEW_CELL_ACTIVATABLE, 80, wx.ALIGN_CENTER, wx.dataview.DATAVIEW_COL_SORTABLE )
+		self.scaling = self.netclasslist.AppendTextColumn( u"Radius (mm)", wx.dataview.DATAVIEW_CELL_EDITABLE, 100, wx.ALIGN_CENTER, wx.dataview.DATAVIEW_COL_SORTABLE )
+		self.passes = self.netclasslist.AppendTextColumn( u"Passes #", wx.dataview.DATAVIEW_CELL_EDITABLE, 80, wx.ALIGN_LEFT, wx.dataview.DATAVIEW_COL_SORTABLE )
+		grid_vert.Add( self.netclasslist, 1, wx.EXPAND|wx.TOP|wx.RIGHT|wx.LEFT, 5 )
+
+		grid_horiz = wx.FlexGridSizer( 0, 4, 0, 0 )
+		grid_horiz.AddGrowableCol( 2 )
+		grid_horiz.SetFlexibleDirection( wx.BOTH )
+		grid_horiz.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+
+		self.do_create = wx.CheckBox( self, wx.ID_ANY, u"create a new file", wx.DefaultPosition, wx.DefaultSize, 0 )
+		grid_horiz.Add( self.do_create, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT, 5 )
+
+		self.use_native = wx.CheckBox( self, wx.ID_ANY, u"use native fillets", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.use_native.SetValue(True)
+		grid_horiz.Add( self.use_native, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT, 5 )
+
+		self.avoid_junctions = wx.CheckBox( self, wx.ID_ANY, u"ignore junctions", wx.DefaultPosition, wx.DefaultSize, 0 )
+		grid_horiz.Add( self.avoid_junctions, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT, 5 )
+
+		self.apply = wx.Button( self, wx.ID_ANY, u"Run", wx.DefaultPosition, wx.Size( 120,-1 ), 0 )
+
+		self.apply.SetDefault()
+		grid_horiz.Add( self.apply, 0, wx.ALL|wx.EXPAND, 5 )
+
+
+		grid_vert.Add( grid_horiz, 1, wx.EXPAND, 5 )
+
+
+		self.SetSizer( grid_vert )
+		self.Layout()
+		grid_vert.Fit( self )
+
+		self.Centre( wx.BOTH )
+
+		# Connect Events
+		self.Bind( wx.EVT_CLOSE, self.on_close )
+		self.netclasslist.Bind( wx.dataview.EVT_DATAVIEW_ITEM_EDITING_DONE, self.on_item_editing, id = wx.ID_ANY )
+		self.apply.Bind( wx.EVT_BUTTON, self.run )
+
+	def __del__( self ):
+		pass
+
+
+	# Virtual event handlers, override them in your derived class
+	def on_close( self, event ):
+		event.Skip()
+
+	def on_item_editing( self, event ):
+		event.Skip()
+
+	def run( self, event ):
+		event.Skip()
+
+
+
+```
+
+# round_tracks/ui/__init__.py
+```round_tracks/ui/__init__.py
+
+```
+
+# round_tracks/ui/round_tracks_ui.fbp
+```round_tracks/ui/round_tracks_ui.fbp
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<wxFormBuilder_Project>
+  <FileVersion major="1" minor="18"/>
+  <object class="Project" expanded="true">
+    <property name="code_generation">Python</property>
+    <property name="cpp_class_decoration">; </property>
+    <property name="cpp_disconnect_events">1</property>
+    <property name="cpp_event_generation">connect</property>
+    <property name="cpp_help_provider">none</property>
+    <property name="cpp_namespace"></property>
+    <property name="cpp_precompiled_header"></property>
+    <property name="cpp_use_array_enum">0</property>
+    <property name="cpp_use_enum">0</property>
+    <property name="embedded_files_path">res</property>
+    <property name="encoding">UTF-8</property>
+    <property name="file">round_tracks_gui</property>
+    <property name="first_id">1000</property>
+    <property name="internationalize">0</property>
+    <property name="lua_skip_events">1</property>
+    <property name="lua_ui_table">UI</property>
+    <property name="name">RoundTracks</property>
+    <property name="path">.</property>
+    <property name="php_disconnect_events">0</property>
+    <property name="php_disconnect_mode">source_name</property>
+    <property name="php_skip_events">1</property>
+    <property name="python_disconnect_events">0</property>
+    <property name="python_disconnect_mode">source_name</property>
+    <property name="python_image_path_wrapper_function_name"></property>
+    <property name="python_indent_with_spaces">0</property>
+    <property name="python_skip_events">1</property>
+    <property name="relative_path">1</property>
+    <property name="use_microsoft_bom">0</property>
+    <property name="use_native_eol">0</property>
+    <object class="Dialog" expanded="true">
+      <property name="aui_managed">0</property>
+      <property name="aui_manager_style">wxAUI_MGR_DEFAULT</property>
+      <property name="bg"></property>
+      <property name="center">wxBOTH</property>
+      <property name="context_help"></property>
+      <property name="context_menu">1</property>
+      <property name="drag_accept_files">0</property>
+      <property name="enabled">1</property>
+      <property name="event_handler">impl_virtual</property>
+      <property name="extra_style"></property>
+      <property name="fg"></property>
+      <property name="font"></property>
+      <property name="hidden">0</property>
+      <property name="id">wxID_ANY</property>
+      <property name="maximum_size"></property>
+      <property name="minimum_size">510,300</property>
+      <property name="name">RoundTracksDialog</property>
+      <property name="pos"></property>
+      <property name="size"></property>
+      <property name="style">wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER</property>
+      <property name="subclass">; ; forward_declare</property>
+      <property name="title">Round Tracks IPC API Demo</property>
+      <property name="tooltip"></property>
+      <property name="two_step_creation">0</property>
+      <property name="window_extra_style"></property>
+      <property name="window_name"></property>
+      <property name="window_style"></property>
+      <event name="OnClose">on_close</event>
+      <object class="wxFlexGridSizer" expanded="true">
+        <property name="cols">1</property>
+        <property name="flexible_direction">wxBOTH</property>
+        <property name="growablecols">0</property>
+        <property name="growablerows">0</property>
+        <property name="hgap">0</property>
+        <property name="minimum_size"></property>
+        <property name="name">grid_vert</property>
+        <property name="non_flexible_grow_mode">wxFLEX_GROWMODE_SPECIFIED</property>
+        <property name="permission">none</property>
+        <property name="rows">2</property>
+        <property name="vgap">0</property>
+        <object class="sizeritem" expanded="true">
+          <property name="border">5</property>
+          <property name="flag">wxEXPAND|wxTOP|wxRIGHT|wxLEFT</property>
+          <property name="proportion">1</property>
+          <object class="wxDataViewListCtrl" expanded="true">
+            <property name="bg"></property>
+            <property name="context_help"></property>
+            <property name="context_menu">1</property>
+            <property name="drag_accept_files">0</property>
+            <property name="enabled">1</property>
+            <property name="fg"></property>
+            <property name="font"></property>
+            <property name="hidden">0</property>
+            <property name="id">wxID_ANY</property>
+            <property name="maximum_size"></property>
+            <property name="minimum_size">450,100</property>
+            <property name="name">netclasslist</property>
+            <property name="permission">protected</property>
+            <property name="pos"></property>
+            <property name="size"></property>
+            <property name="style"></property>
+            <property name="subclass">; ; forward_declare</property>
+            <property name="tooltip"></property>
+            <property name="window_extra_style"></property>
+            <property name="window_name"></property>
+            <property name="window_style"></property>
+            <event name="OnDataViewListCtrlItemEditingDone">on_item_editing</event>
+            <object class="dataViewListColumn" expanded="true">
+              <property name="align">wxALIGN_LEFT</property>
+              <property name="ellipsize"></property>
+              <property name="flags">wxDATAVIEW_COL_RESIZABLE|wxDATAVIEW_COL_SORTABLE</property>
+              <property name="label">Net Class</property>
+              <property name="mode">wxDATAVIEW_CELL_INERT</property>
+              <property name="name">net_class</property>
+              <property name="permission">protected</property>
+              <property name="type">Text</property>
+              <property name="width">160</property>
+            </object>
+            <object class="dataViewListColumn" expanded="true">
+              <property name="align">wxALIGN_CENTER</property>
+              <property name="ellipsize"></property>
+              <property name="flags">wxDATAVIEW_COL_SORTABLE</property>
+              <property name="label">Rounding</property>
+              <property name="mode">wxDATAVIEW_CELL_ACTIVATABLE</property>
+              <property name="name">do_rounding</property>
+              <property name="permission">protected</property>
+              <property name="type">Toggle</property>
+              <property name="width">80</property>
+            </object>
+            <object class="dataViewListColumn" expanded="true">
+              <property name="align">wxALIGN_CENTER</property>
+              <property name="ellipsize"></property>
+              <property name="flags">wxDATAVIEW_COL_SORTABLE</property>
+              <property name="label">Radius (mm)</property>
+              <property name="mode">wxDATAVIEW_CELL_EDITABLE</property>
+              <property name="name">scaling</property>
+              <property name="permission">protected</property>
+              <property name="type">Text</property>
+              <property name="width">100</property>
+            </object>
+            <object class="dataViewListColumn" expanded="true">
+              <property name="align">wxALIGN_LEFT</property>
+              <property name="ellipsize"></property>
+              <property name="flags">wxDATAVIEW_COL_SORTABLE</property>
+              <property name="label">Passes #</property>
+              <property name="mode">wxDATAVIEW_CELL_EDITABLE</property>
+              <property name="name">passes</property>
+              <property name="permission">protected</property>
+              <property name="type">Text</property>
+              <property name="width">80</property>
+            </object>
+          </object>
+        </object>
+        <object class="sizeritem" expanded="true">
+          <property name="border">5</property>
+          <property name="flag">wxEXPAND</property>
+          <property name="proportion">1</property>
+          <object class="wxFlexGridSizer" expanded="true">
+            <property name="cols">4</property>
+            <property name="flexible_direction">wxBOTH</property>
+            <property name="growablecols">2</property>
+            <property name="growablerows"></property>
+            <property name="hgap">0</property>
+            <property name="minimum_size"></property>
+            <property name="name">grid_horiz</property>
+            <property name="non_flexible_grow_mode">wxFLEX_GROWMODE_SPECIFIED</property>
+            <property name="permission">none</property>
+            <property name="rows">0</property>
+            <property name="vgap">0</property>
+            <object class="sizeritem" expanded="true">
+              <property name="border">5</property>
+              <property name="flag">wxALL|wxALIGN_CENTER_VERTICAL|wxALIGN_LEFT</property>
+              <property name="proportion">0</property>
+              <object class="wxCheckBox" expanded="true">
+                <property name="BottomDockable">1</property>
+                <property name="LeftDockable">1</property>
+                <property name="RightDockable">1</property>
+                <property name="TopDockable">1</property>
+                <property name="aui_layer">0</property>
+                <property name="aui_name"></property>
+                <property name="aui_position">0</property>
+                <property name="aui_row">0</property>
+                <property name="best_size"></property>
+                <property name="bg"></property>
+                <property name="caption"></property>
+                <property name="caption_visible">1</property>
+                <property name="center_pane">0</property>
+                <property name="checked">0</property>
+                <property name="close_button">1</property>
+                <property name="context_help"></property>
+                <property name="context_menu">1</property>
+                <property name="default_pane">0</property>
+                <property name="dock">Dock</property>
+                <property name="dock_fixed">0</property>
+                <property name="docking">Left</property>
+                <property name="drag_accept_files">0</property>
+                <property name="enabled">1</property>
+                <property name="fg"></property>
+                <property name="floatable">1</property>
+                <property name="font"></property>
+                <property name="gripper">0</property>
+                <property name="hidden">0</property>
+                <property name="id">wxID_ANY</property>
+                <property name="label">create a new file</property>
+                <property name="max_size"></property>
+                <property name="maximize_button">0</property>
+                <property name="maximum_size"></property>
+                <property name="min_size"></property>
+                <property name="minimize_button">0</property>
+                <property name="minimum_size"></property>
+                <property name="moveable">1</property>
+                <property name="name">do_create</property>
+                <property name="pane_border">1</property>
+                <property name="pane_position"></property>
+                <property name="pane_size"></property>
+                <property name="permission">protected</property>
+                <property name="pin_button">1</property>
+                <property name="pos"></property>
+                <property name="resize">Resizable</property>
+                <property name="show">1</property>
+                <property name="size"></property>
+                <property name="style"></property>
+                <property name="subclass">; ; forward_declare</property>
+                <property name="toolbar_pane">0</property>
+                <property name="tooltip"></property>
+                <property name="validator_data_type"></property>
+                <property name="validator_style">wxFILTER_NONE</property>
+                <property name="validator_type">wxDefaultValidator</property>
+                <property name="validator_variable"></property>
+                <property name="window_extra_style"></property>
+                <property name="window_name"></property>
+                <property name="window_style"></property>
+              </object>
+            </object>
+            <object class="sizeritem" expanded="true">
+              <property name="border">5</property>
+              <property name="flag">wxALL|wxALIGN_CENTER_VERTICAL|wxALIGN_LEFT</property>
+              <property name="proportion">0</property>
+              <object class="wxCheckBox" expanded="true">
+                <property name="BottomDockable">1</property>
+                <property name="LeftDockable">1</property>
+                <property name="RightDockable">1</property>
+                <property name="TopDockable">1</property>
+                <property name="aui_layer">0</property>
+                <property name="aui_name"></property>
+                <property name="aui_position">0</property>
+                <property name="aui_row">0</property>
+                <property name="best_size"></property>
+                <property name="bg"></property>
+                <property name="caption"></property>
+                <property name="caption_visible">1</property>
+                <property name="center_pane">0</property>
+                <property name="checked">1</property>
+                <property name="close_button">1</property>
+                <property name="context_help"></property>
+                <property name="context_menu">1</property>
+                <property name="default_pane">0</property>
+                <property name="dock">Dock</property>
+                <property name="dock_fixed">0</property>
+                <property name="docking">Left</property>
+                <property name="drag_accept_files">0</property>
+                <property name="enabled">1</property>
+                <property name="fg"></property>
+                <property name="floatable">1</property>
+                <property name="font"></property>
+                <property name="gripper">0</property>
+                <property name="hidden">0</property>
+                <property name="id">wxID_ANY</property>
+                <property name="label">use native fillets</property>
+                <property name="max_size"></property>
+                <property name="maximize_button">0</property>
+                <property name="maximum_size"></property>
+                <property name="min_size"></property>
+                <property name="minimize_button">0</property>
+                <property name="minimum_size"></property>
+                <property name="moveable">1</property>
+                <property name="name">use_native</property>
+                <property name="pane_border">1</property>
+                <property name="pane_position"></property>
+                <property name="pane_size"></property>
+                <property name="permission">protected</property>
+                <property name="pin_button">1</property>
+                <property name="pos"></property>
+                <property name="resize">Resizable</property>
+                <property name="show">1</property>
+                <property name="size"></property>
+                <property name="style"></property>
+                <property name="subclass">; ; forward_declare</property>
+                <property name="toolbar_pane">0</property>
+                <property name="tooltip"></property>
+                <property name="validator_data_type"></property>
+                <property name="validator_style">wxFILTER_NONE</property>
+                <property name="validator_type">wxDefaultValidator</property>
+                <property name="validator_variable"></property>
+                <property name="window_extra_style"></property>
+                <property name="window_name"></property>
+                <property name="window_style"></property>
+              </object>
+            </object>
+            <object class="sizeritem" expanded="true">
+              <property name="border">5</property>
+              <property name="flag">wxALL|wxALIGN_CENTER_VERTICAL|wxALIGN_LEFT</property>
+              <property name="proportion">0</property>
+              <object class="wxCheckBox" expanded="true">
+                <property name="BottomDockable">1</property>
+                <property name="LeftDockable">1</property>
+                <property name="RightDockable">1</property>
+                <property name="TopDockable">1</property>
+                <property name="aui_layer">0</property>
+                <property name="aui_name"></property>
+                <property name="aui_position">0</property>
+                <property name="aui_row">0</property>
+                <property name="best_size"></property>
+                <property name="bg"></property>
+                <property name="caption"></property>
+                <property name="caption_visible">1</property>
+                <property name="center_pane">0</property>
+                <property name="checked">0</property>
+                <property name="close_button">1</property>
+                <property name="context_help"></property>
+                <property name="context_menu">1</property>
+                <property name="default_pane">0</property>
+                <property name="dock">Dock</property>
+                <property name="dock_fixed">0</property>
+                <property name="docking">Left</property>
+                <property name="drag_accept_files">0</property>
+                <property name="enabled">1</property>
+                <property name="fg"></property>
+                <property name="floatable">1</property>
+                <property name="font"></property>
+                <property name="gripper">0</property>
+                <property name="hidden">0</property>
+                <property name="id">wxID_ANY</property>
+                <property name="label">ignore junctions</property>
+                <property name="max_size"></property>
+                <property name="maximize_button">0</property>
+                <property name="maximum_size"></property>
+                <property name="min_size"></property>
+                <property name="minimize_button">0</property>
+                <property name="minimum_size"></property>
+                <property name="moveable">1</property>
+                <property name="name">avoid_junctions</property>
+                <property name="pane_border">1</property>
+                <property name="pane_position"></property>
+                <property name="pane_size"></property>
+                <property name="permission">protected</property>
+                <property name="pin_button">1</property>
+                <property name="pos"></property>
+                <property name="resize">Resizable</property>
+                <property name="show">1</property>
+                <property name="size"></property>
+                <property name="style"></property>
+                <property name="subclass">; ; forward_declare</property>
+                <property name="toolbar_pane">0</property>
+                <property name="tooltip"></property>
+                <property name="validator_data_type"></property>
+                <property name="validator_style">wxFILTER_NONE</property>
+                <property name="validator_type">wxDefaultValidator</property>
+                <property name="validator_variable"></property>
+                <property name="window_extra_style"></property>
+                <property name="window_name"></property>
+                <property name="window_style"></property>
+              </object>
+            </object>
+            <object class="sizeritem" expanded="true">
+              <property name="border">5</property>
+              <property name="flag">wxALL|wxEXPAND</property>
+              <property name="proportion">0</property>
+              <object class="wxButton" expanded="true">
+                <property name="BottomDockable">1</property>
+                <property name="LeftDockable">1</property>
+                <property name="RightDockable">1</property>
+                <property name="TopDockable">1</property>
+                <property name="aui_layer">0</property>
+                <property name="aui_name"></property>
+                <property name="aui_position">0</property>
+                <property name="aui_row">0</property>
+                <property name="auth_needed">0</property>
+                <property name="best_size"></property>
+                <property name="bg"></property>
+                <property name="bitmap"></property>
+                <property name="caption"></property>
+                <property name="caption_visible">1</property>
+                <property name="center_pane">0</property>
+                <property name="close_button">1</property>
+                <property name="context_help"></property>
+                <property name="context_menu">1</property>
+                <property name="current"></property>
+                <property name="default">1</property>
+                <property name="default_pane">0</property>
+                <property name="disabled"></property>
+                <property name="dock">Dock</property>
+                <property name="dock_fixed">0</property>
+                <property name="docking">Left</property>
+                <property name="drag_accept_files">0</property>
+                <property name="enabled">1</property>
+                <property name="fg"></property>
+                <property name="floatable">1</property>
+                <property name="focus"></property>
+                <property name="font"></property>
+                <property name="gripper">0</property>
+                <property name="hidden">0</property>
+                <property name="id">wxID_ANY</property>
+                <property name="label">Run</property>
+                <property name="margins"></property>
+                <property name="markup">0</property>
+                <property name="max_size"></property>
+                <property name="maximize_button">0</property>
+                <property name="maximum_size"></property>
+                <property name="min_size"></property>
+                <property name="minimize_button">0</property>
+                <property name="minimum_size"></property>
+                <property name="moveable">1</property>
+                <property name="name">apply</property>
+                <property name="pane_border">1</property>
+                <property name="pane_position"></property>
+                <property name="pane_size"></property>
+                <property name="permission">protected</property>
+                <property name="pin_button">1</property>
+                <property name="pos"></property>
+                <property name="position"></property>
+                <property name="pressed"></property>
+                <property name="resize">Resizable</property>
+                <property name="show">1</property>
+                <property name="size">120,-1</property>
+                <property name="style"></property>
+                <property name="subclass">; ; forward_declare</property>
+                <property name="toolbar_pane">0</property>
+                <property name="tooltip"></property>
+                <property name="validator_data_type"></property>
+                <property name="validator_style">wxFILTER_NONE</property>
+                <property name="validator_type">wxDefaultValidator</property>
+                <property name="validator_variable"></property>
+                <property name="window_extra_style"></property>
+                <property name="window_name"></property>
+                <property name="window_style"></property>
+                <event name="OnButtonClick">run</event>
+              </object>
+            </object>
+          </object>
+        </object>
+      </object>
+    </object>
+  </object>
+</wxFormBuilder_Project>
+
+```
+
+# layer_indicator/layer_indicator.py
+```layer_indicator/layer_indicator.py
+#!/usr/bin/env python3
+
+# Copyright The KiCad Developers
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the “Software”), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from typing import cast
+
+from kipy import KiCad
+from kipy.geometry import Vector2
+from kipy.board import BoardLayer, BoardLayerClass
+from kipy.board_types import BoardText, FootprintInstance
+
+
+if __name__=='__main__':
+    kicad = KiCad()
+    board = kicad.get_board()
+    stackup = board.get_stackup()
+    defaults = board.get_graphics_defaults()[BoardLayerClass.BLC_COPPER]
+
+    sizing_text = BoardText()
+    sizing_text.layer = BoardLayer.BL_F_Cu
+    sizing_text.position = Vector2.from_xy(0, 0)
+    sizing_text.value = "0"
+    sizing_text.attributes = defaults.text
+
+    char_width = kicad.get_text_extents(sizing_text.as_text()).size.x
+
+    copper_layers = [layer for layer in stackup.layers
+                     if layer.layer <= BoardLayer.BL_B_Cu
+                     and layer.layer >= BoardLayer.BL_F_Cu]
+
+    fpi = FootprintInstance()
+    fpi.layer = BoardLayer.BL_F_Cu
+    fpi.reference_field.text.value = "STACKUP1"
+    fpi.reference_field.text.attributes = defaults.text
+    fpi.reference_field.visible = False
+    fpi.value_field.text.attributes = defaults.text
+    fpi.value_field.visible = False
+    fpi.attributes.not_in_schematic = True
+    fpi.attributes.exclude_from_bill_of_materials = True
+    fpi.attributes.exclude_from_position_files = True
+    fp = fpi.definition
+
+    offset = 0
+    layer_idx = 1
+    for copper_layer in copper_layers:
+        layer_text = BoardText()
+        layer_text.layer = copper_layer.layer
+        layer_text.value = "%d" % layer_idx
+        layer_text.position = Vector2.from_xy(offset, 0)
+        layer_text.attributes = defaults.text
+        fp.add_item(layer_text)
+
+        padding = 1 if layer_idx == 9 else 0.5
+        item_width = int((len(layer_text.value) + padding) * char_width)
+
+        offset += item_width
+        layer_idx += 1
+
+    created = [cast(FootprintInstance, i) for i in board.create_items(fpi)]
+
+    if len(created) == 1:
+        board.interactive_move(created[0].id)
+
+```
+
+# layer_indicator/requirements.txt
+```layer_indicator/requirements.txt
+kicad-python>=0.2.0
+
+```
+
+# layer_indicator/plugin.json
+```layer_indicator/plugin.json
+{
+    "$schema": "https://go.kicad.org/api/schemas/v1",
+    "identifier": "com.gitlab.craftyjon.kipy.layer_indicator",
+    "name": "Layer Indicator",
+    "description": "Generates copper layer indicator footprints for the current board stackup",
+    "runtime": {
+        "type": "python",
+        "min_version": "3.10"
+    },
+    "actions": [
+        {
+            "identifier": "place-layer-indicator",
+            "name": "Place Layer Indicator",
+            "description": "Creates a layer indicator footprint",
+            "show-button": true,
+            "scopes": [
+                "pcb"
+            ],
+            "entrypoint": "layer_indicator.py",
+            "icons-light": [
+                "icons/layer_indicator_24.png",
+                "icons/layer_indicator_48.png"
+            ]
+        }
+    ]
+}
+
+```
+
+# layer_indicator/icons/layer_indicator_48.png
+```layer_indicator/icons/layer_indicator_48.png
+[VIBE_CODING_BOT: BINARY FILE]
+```
+
+# layer_indicator/icons/layer_indicator_24.png
+```layer_indicator/icons/layer_indicator_24.png
+[VIBE_CODING_BOT: BINARY FILE]
+```
+
