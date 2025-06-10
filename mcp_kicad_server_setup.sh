@@ -4,3 +4,4 @@ source venv/bin/activate
 pip install kicad-python
 pip install Flask
 pip install requests
+pip install openai
